@@ -132,7 +132,8 @@ class GPTFinancialParser:
     
     def transform_to_structured_table(self, content):
         """
-        Use GPT to transform unformatted financial document content into a structured table.
+        Use GPT to transform unformatted financial document content into a structured table,
+        using specific accounting categories.
         
         Args:
             content (str): Raw content from the financial document
@@ -141,6 +142,22 @@ class GPTFinancialParser:
             pandas.DataFrame: Structured table with standardized columns
         """
         try:
+            # Define the specific accounting categories
+            accounting_categories = [
+                "Revenue (income, sales, etc.)",
+                "Expenses: Office (rent, utilities, supplies, etc.)",
+                "Expenses: Travel (airfare, accommodation, meals while traveling, etc.)",
+                "Expenses: Marketing (advertising, promotions, etc.)",
+                "Expenses: Professional Services (legal, accounting, consulting, etc.)",
+                "Expenses: Technology (software, hardware, IT services, etc.)",
+                "Expenses: Payroll (salaries, wages, benefits, etc.)",
+                "Expenses: Other (miscellaneous expenses)",
+                "Asset Purchase (equipment, property, investments, etc.)",
+                "Liability Payment (loan repayments, credit card payments, etc.)",
+                "Transfer (moving money between accounts)",
+                "Uncategorized (if unable to determine)"
+            ]
+            
             prompt = f"""
             You are a financial data extraction expert. Transform the following unformatted financial document content into a structured table.
             
@@ -149,22 +166,20 @@ class GPTFinancialParser:
             2. Extract all relevant financial data and organize it into a standardized table format.
             3. For ALL document types, create a table with these columns:
                - date: Use document date if available, or today's date if not (format: YYYY-MM-DD)
-               - category: Main category (e.g., "Revenue", "Expenses", "Assets", "Liabilities")
-               - subcategory: More specific category (e.g., "Sales", "Rent", "Cash", "Loans")
+               - category: Assign ONE of the following specific accounting categories: {', '.join([f'\"{cat}\"' for cat in accounting_categories])}. Use NZ English spelling.
                - description: Detailed description of the item
                - amount: Numeric value (positive for income/assets, negative for expenses/liabilities)
             
-            4. For transaction lists: Each row should represent one transaction.
-            5. For profit and loss statements: Create rows for each revenue and expense item.
-            6. For balance sheets: Create rows for each asset, liability, and equity item.
+            4. For transaction lists: Each row should represent one transaction. Assign the most appropriate accounting category.
+            5. For profit and loss statements: Create rows for each revenue and expense item. Assign the most appropriate accounting category.
+            6. For balance sheets: Create rows for each asset, liability, and equity item. Assign the most appropriate accounting category (e.g., Asset Purchase, Liability Payment, Transfer, or Uncategorized).
             
             Return ONLY a JSON object with the format:
             {{
                 "table_data": [
                     {{
                         "date": "YYYY-MM-DD",
-                        "category": "Category name",
-                        "subcategory": "Subcategory name",
+                        "category": "Specific Accounting Category",
                         "description": "Detailed description",
                         "amount": 1234.56
                     }},
@@ -175,7 +190,7 @@ class GPTFinancialParser:
             IMPORTANT:
             - Include ALL financial data from the document
             - Ensure amounts are numeric values
-            - Use consistent categories and subcategories
+            - Use ONLY the provided accounting categories for the 'category' field
             - If a field is unknown, use null or empty string
             - Make sure the JSON is valid and properly formatted
             
@@ -183,12 +198,12 @@ class GPTFinancialParser:
             {content[:8000]}  # Limit content to avoid token limits
             """
             
-            print("Sending content to GPT for transformation...")
+            print("Sending content to GPT for transformation with specific categories...")
             
             response = self.client.chat.completions.create(
                 model="gpt-4-turbo",
                 messages=[
-                    {"role": "system", "content": "You are a financial data extraction expert that transforms unformatted financial documents into structured tables."},
+                    {"role": "system", "content": "You are a financial data extraction expert that transforms unformatted financial documents into structured tables using specific accounting categories and NZ English spelling."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1,
@@ -209,28 +224,32 @@ class GPTFinancialParser:
                 df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.strftime('%Y-%m-%d')
             
             # Ensure we have the required columns for the application
-            required_columns = ['date', 'description', 'amount']
+            required_columns = ['date', 'description', 'amount', 'category']
             for col in required_columns:
                 if col not in df.columns:
                     if col == 'description':
-                        # If description is missing but we have category/subcategory, create a description
-                        if 'category' in df.columns and 'subcategory' in df.columns:
-                            df['description'] = df.apply(
-                                lambda row: f"{row['category']}: {row['subcategory']}" if pd.notna(row['subcategory']) else row['category'], 
-                                axis=1
-                            )
-                        else:
-                            df['description'] = "Unknown"
+                        df['description'] = "Unknown"
                     elif col == 'date':
                         df['date'] = pd.Timestamp.now().strftime('%Y-%m-%d')
                     elif col == 'amount':
                         df['amount'] = 0.0
+                    elif col == 'category':
+                        df['category'] = "Uncategorized"
             
-            return df
+            # Select and reorder columns to match expected output for categorization step
+            # The categorization step expects 'date', 'description', 'amount'
+            # We will return the full table, but ensure these columns exist
+            if not all(col in df.columns for col in ['date', 'description', 'amount']):
+                 raise ValueError("Required columns ('date', 'description', 'amount') not found after GPT processing.")
+
+            # The categorization step will be applied later in the main app
+            # Return the structured table with the GPT-assigned category
+            return df[['date', 'description', 'amount', 'category']]
+        
         except Exception as e:
             print(f"Error transforming document to structured table: {e}")
             # Return empty DataFrame with required columns
-            return pd.DataFrame(columns=['date', 'description', 'amount'])
+            return pd.DataFrame(columns=['date', 'description', 'amount', 'category'])
     
     def parse_financial_document(self, file_path):
         """
@@ -254,7 +273,7 @@ class GPTFinancialParser:
         except Exception as e:
             print(f"Error parsing financial document: {e}")
             # Return empty DataFrame with standard columns
-            return pd.DataFrame(columns=['date', 'description', 'amount'])
+            return pd.DataFrame(columns=['date', 'description', 'amount', 'category'])
 
 # Function to use in the main application
 def parse_with_gpt(file_path):
@@ -272,4 +291,4 @@ def parse_with_gpt(file_path):
         return parser.parse_financial_document(file_path)
     except Exception as e:
         print(f"Error parsing with GPT: {e}")
-        return pd.DataFrame(columns=['date', 'description', 'amount'])
+        return pd.DataFrame(columns=['date', 'description', 'amount', 'category'])
