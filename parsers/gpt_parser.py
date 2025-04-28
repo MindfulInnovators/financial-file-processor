@@ -12,8 +12,8 @@ load_dotenv()
 
 class GPTFinancialParser:
     """
-    A flexible parser that uses OpenAI's GPT to extract structured financial data
-    from various document types (profit and loss, balance sheet, transaction list).
+    A flexible parser that uses OpenAI's GPT to transform unformatted financial documents
+    into structured tables that can be easily processed by Python.
     """
     
     def __init__(self):
@@ -130,28 +130,65 @@ class GPTFinancialParser:
         except Exception as e:
             raise ValueError(f"Error extracting image content: {e}")
     
-    def detect_document_type(self, content):
-        """Use GPT to detect the type of financial document."""
+    def transform_to_structured_table(self, content):
+        """
+        Use GPT to transform unformatted financial document content into a structured table.
+        
+        Args:
+            content (str): Raw content from the financial document
+            
+        Returns:
+            pandas.DataFrame: Structured table with standardized columns
+        """
         try:
             prompt = f"""
-            Analyze the following financial document content and determine its type.
-            Possible types include:
-            1. Transaction List - Contains individual financial transactions with dates, descriptions, and amounts
-            2. Profit and Loss Statement - Shows revenue, expenses, and profit/loss over a period
-            3. Balance Sheet - Shows assets, liabilities, and equity at a specific point in time
-            4. Cash Flow Statement - Shows cash inflows and outflows
-            5. Other - Any other type of financial document
+            You are a financial data extraction expert. Transform the following unformatted financial document content into a structured table.
             
-            Return ONLY a JSON object with the format: {{"document_type": "type_name"}}
+            INSTRUCTIONS:
+            1. Analyze the document to determine if it's a transaction list, profit and loss statement, balance sheet, or other financial document.
+            2. Extract all relevant financial data and organize it into a standardized table format.
+            3. For ALL document types, create a table with these columns:
+               - date: Use document date if available, or today's date if not (format: YYYY-MM-DD)
+               - category: Main category (e.g., "Revenue", "Expenses", "Assets", "Liabilities")
+               - subcategory: More specific category (e.g., "Sales", "Rent", "Cash", "Loans")
+               - description: Detailed description of the item
+               - amount: Numeric value (positive for income/assets, negative for expenses/liabilities)
+            
+            4. For transaction lists: Each row should represent one transaction.
+            5. For profit and loss statements: Create rows for each revenue and expense item.
+            6. For balance sheets: Create rows for each asset, liability, and equity item.
+            
+            Return ONLY a JSON object with the format:
+            {{
+                "table_data": [
+                    {{
+                        "date": "YYYY-MM-DD",
+                        "category": "Category name",
+                        "subcategory": "Subcategory name",
+                        "description": "Detailed description",
+                        "amount": 1234.56
+                    }},
+                    ...more rows...
+                ]
+            }}
+            
+            IMPORTANT:
+            - Include ALL financial data from the document
+            - Ensure amounts are numeric values
+            - Use consistent categories and subcategories
+            - If a field is unknown, use null or empty string
+            - Make sure the JSON is valid and properly formatted
             
             Document content:
-            {content[:4000]}  # Limit content to avoid token limits
+            {content[:8000]}  # Limit content to avoid token limits
             """
+            
+            print("Sending content to GPT for transformation...")
             
             response = self.client.chat.completions.create(
                 model="gpt-4-turbo",
                 messages=[
-                    {"role": "system", "content": "You are a financial document analysis assistant that identifies document types."},
+                    {"role": "system", "content": "You are a financial data extraction expert that transforms unformatted financial documents into structured tables."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1,
@@ -159,14 +196,45 @@ class GPTFinancialParser:
             )
             
             result = json.loads(response.choices[0].message.content)
-            return result["document_type"]
+            print(f"GPT transformation complete. Extracted {len(result.get('table_data', []))} rows of data.")
+            
+            # Convert to DataFrame
+            df = pd.DataFrame(result.get("table_data", []))
+            
+            # Ensure correct data types
+            if 'amount' in df.columns:
+                df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
+            
+            if 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.strftime('%Y-%m-%d')
+            
+            # Ensure we have the required columns for the application
+            required_columns = ['date', 'description', 'amount']
+            for col in required_columns:
+                if col not in df.columns:
+                    if col == 'description':
+                        # If description is missing but we have category/subcategory, create a description
+                        if 'category' in df.columns and 'subcategory' in df.columns:
+                            df['description'] = df.apply(
+                                lambda row: f"{row['category']}: {row['subcategory']}" if pd.notna(row['subcategory']) else row['category'], 
+                                axis=1
+                            )
+                        else:
+                            df['description'] = "Unknown"
+                    elif col == 'date':
+                        df['date'] = pd.Timestamp.now().strftime('%Y-%m-%d')
+                    elif col == 'amount':
+                        df['amount'] = 0.0
+            
+            return df
         except Exception as e:
-            print(f"Error detecting document type: {e}")
-            return "Unknown"
+            print(f"Error transforming document to structured table: {e}")
+            # Return empty DataFrame with required columns
+            return pd.DataFrame(columns=['date', 'description', 'amount'])
     
     def parse_financial_document(self, file_path):
         """
-        Parse a financial document using GPT to extract structured data.
+        Parse a financial document using GPT to transform it into a structured table.
         
         Args:
             file_path (str): Path to the financial document file
@@ -179,243 +247,19 @@ class GPTFinancialParser:
             content_data = self.extract_file_content(file_path)
             content = content_data["main_content"]
             
-            # Detect document type
-            document_type = self.detect_document_type(content)
-            print(f"Detected document type: {document_type}")
+            # Transform content to structured table
+            df = self.transform_to_structured_table(content)
             
-            # Create appropriate prompt based on document type
-            if document_type.lower() in ["transaction list", "transactions"]:
-                return self._parse_transaction_list(content)
-            elif document_type.lower() in ["profit and loss statement", "profit and loss", "income statement"]:
-                return self._parse_profit_and_loss(content)
-            elif document_type.lower() in ["balance sheet"]:
-                return self._parse_balance_sheet(content)
-            else:
-                # Default to generic financial data extraction
-                return self._parse_generic_financial_data(content)
+            return df
         except Exception as e:
             print(f"Error parsing financial document: {e}")
             # Return empty DataFrame with standard columns
-            return pd.DataFrame(columns=['date', 'description', 'amount'])
-    
-    def _parse_transaction_list(self, content):
-        """Parse a transaction list document."""
-        try:
-            prompt = f"""
-            Extract transaction data from the following financial document.
-            The document appears to be a transaction list.
-            
-            For each transaction, extract:
-            1. Date - in YYYY-MM-DD format if available, otherwise use the document date or today's date
-            2. Description - the transaction description or payee
-            3. Amount - the transaction amount as a numeric value (positive for income, negative for expenses)
-            
-            Return ONLY a JSON object with the format:
-            {{
-                "transactions": [
-                    {{"date": "YYYY-MM-DD", "description": "Description 1", "amount": 123.45}},
-                    {{"date": "YYYY-MM-DD", "description": "Description 2", "amount": -67.89}}
-                ]
-            }}
-            
-            Document content:
-            {content[:8000]}  # Limit content to avoid token limits
-            """
-            
-            response = self.client.chat.completions.create(
-                model="gpt-4-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a financial data extraction assistant that extracts transaction data from documents."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.1,
-                response_format={"type": "json_object"}
-            )
-            
-            result = json.loads(response.choices[0].message.content)
-            
-            # Convert to DataFrame
-            df = pd.DataFrame(result["transactions"])
-            
-            # Ensure correct data types
-            if 'amount' in df.columns:
-                df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
-            
-            if 'date' in df.columns:
-                df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.strftime('%Y-%m-%d')
-            
-            return df
-        except Exception as e:
-            print(f"Error parsing transaction list: {e}")
-            return pd.DataFrame(columns=['date', 'description', 'amount'])
-    
-    def _parse_profit_and_loss(self, content):
-        """Parse a profit and loss statement."""
-        try:
-            prompt = f"""
-            Extract financial data from the following profit and loss statement.
-            
-            For each line item, extract:
-            1. Date - use the statement period end date if available, otherwise today's date
-            2. Description - the line item description (e.g., "Revenue", "Expenses: Rent", "Net Income")
-            3. Amount - the line item amount as a numeric value
-            
-            Group the items into these categories:
-            - Revenue items (positive amounts)
-            - Expense items (negative amounts)
-            - Profit/Loss calculations
-            
-            Return ONLY a JSON object with the format:
-            {{
-                "transactions": [
-                    {{"date": "YYYY-MM-DD", "description": "Revenue: Sales", "amount": 10000.00}},
-                    {{"date": "YYYY-MM-DD", "description": "Expenses: Rent", "amount": -2000.00}},
-                    {{"date": "YYYY-MM-DD", "description": "Net Income", "amount": 8000.00}}
-                ]
-            }}
-            
-            Document content:
-            {content[:8000]}  # Limit content to avoid token limits
-            """
-            
-            response = self.client.chat.completions.create(
-                model="gpt-4-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a financial data extraction assistant that extracts profit and loss data from statements."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.1,
-                response_format={"type": "json_object"}
-            )
-            
-            result = json.loads(response.choices[0].message.content)
-            
-            # Convert to DataFrame
-            df = pd.DataFrame(result["transactions"])
-            
-            # Ensure correct data types
-            if 'amount' in df.columns:
-                df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
-            
-            if 'date' in df.columns:
-                df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.strftime('%Y-%m-%d')
-            
-            return df
-        except Exception as e:
-            print(f"Error parsing profit and loss statement: {e}")
-            return pd.DataFrame(columns=['date', 'description', 'amount'])
-    
-    def _parse_balance_sheet(self, content):
-        """Parse a balance sheet."""
-        try:
-            prompt = f"""
-            Extract financial data from the following balance sheet.
-            
-            For each line item, extract:
-            1. Date - use the balance sheet date if available, otherwise today's date
-            2. Description - the line item description (e.g., "Assets: Cash", "Liabilities: Loans", "Equity: Retained Earnings")
-            3. Amount - the line item amount as a numeric value
-            
-            Group the items into these categories:
-            - Assets (positive amounts)
-            - Liabilities (negative amounts)
-            - Equity items
-            
-            Return ONLY a JSON object with the format:
-            {{
-                "transactions": [
-                    {{"date": "YYYY-MM-DD", "description": "Assets: Cash", "amount": 5000.00}},
-                    {{"date": "YYYY-MM-DD", "description": "Liabilities: Loans", "amount": -3000.00}},
-                    {{"date": "YYYY-MM-DD", "description": "Equity: Retained Earnings", "amount": 2000.00}}
-                ]
-            }}
-            
-            Document content:
-            {content[:8000]}  # Limit content to avoid token limits
-            """
-            
-            response = self.client.chat.completions.create(
-                model="gpt-4-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a financial data extraction assistant that extracts balance sheet data."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.1,
-                response_format={"type": "json_object"}
-            )
-            
-            result = json.loads(response.choices[0].message.content)
-            
-            # Convert to DataFrame
-            df = pd.DataFrame(result["transactions"])
-            
-            # Ensure correct data types
-            if 'amount' in df.columns:
-                df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
-            
-            if 'date' in df.columns:
-                df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.strftime('%Y-%m-%d')
-            
-            return df
-        except Exception as e:
-            print(f"Error parsing balance sheet: {e}")
-            return pd.DataFrame(columns=['date', 'description', 'amount'])
-    
-    def _parse_generic_financial_data(self, content):
-        """Parse generic financial data when document type is unclear."""
-        try:
-            prompt = f"""
-            Extract financial data from the following document.
-            The document type is unclear, so extract any financial information you can find.
-            
-            For each financial item, extract:
-            1. Date - any date associated with the item, or the document date, or today's date
-            2. Description - a description of the financial item
-            3. Amount - the monetary amount as a numeric value
-            
-            Return ONLY a JSON object with the format:
-            {{
-                "transactions": [
-                    {{"date": "YYYY-MM-DD", "description": "Item 1", "amount": 123.45}},
-                    {{"date": "YYYY-MM-DD", "description": "Item 2", "amount": 67.89}}
-                ]
-            }}
-            
-            Document content:
-            {content[:8000]}  # Limit content to avoid token limits
-            """
-            
-            response = self.client.chat.completions.create(
-                model="gpt-4-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a financial data extraction assistant that extracts financial data from documents."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.1,
-                response_format={"type": "json_object"}
-            )
-            
-            result = json.loads(response.choices[0].message.content)
-            
-            # Convert to DataFrame
-            df = pd.DataFrame(result["transactions"])
-            
-            # Ensure correct data types
-            if 'amount' in df.columns:
-                df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
-            
-            if 'date' in df.columns:
-                df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.strftime('%Y-%m-%d')
-            
-            return df
-        except Exception as e:
-            print(f"Error parsing generic financial data: {e}")
             return pd.DataFrame(columns=['date', 'description', 'amount'])
 
 # Function to use in the main application
 def parse_with_gpt(file_path):
     """
-    Parse a financial document using GPT.
+    Parse a financial document using GPT to transform it into a structured table.
     
     Args:
         file_path (str): Path to the financial document file
