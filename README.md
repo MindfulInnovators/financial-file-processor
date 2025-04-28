@@ -1,29 +1,24 @@
-# Financial File Processor - Final Version 3
+# Financial File Processor
 
 A Python-based web application that allows users to upload financial files (Excel, CSV, PDF, or Images), extracts structured data, and categorizes transactions using AI.
 
-## Final Fixes (v3)
+## Features
 
-- **Fixed UnboundLocalError**: Resolved an error related to `st.set_page_config` caused by a duplicate Streamlit import.
-- **Completely Removed API Key Configuration Page**: The separate page for API key configuration has been removed, along with all references to it in the main application.
-- **Updated API Key Detection**: The application now properly checks for API keys in both environment variables and Streamlit secrets.
-- **Aligned GPT Parser Categories**: The GPT parser uses the specific accounting categories requested, ensuring consistency in data transformation.
+- Upload and process multiple file types (Excel, CSV, PDF, Images)
+- Extract structured financial data (description, amount, date)
+- AI-powered transaction categorization using OpenAI's API
+- Interactive data visualization with charts and tables
+- Download categorized data as Excel files
+- Track upload history
 
-## Key Features
+## Demo
 
-- **GPT-Powered Intelligent Parser**: Transforms unformatted financial documents (profit and loss, balance sheets, transaction lists) into structured tables using specific accounting categories.
-- **Handles Complex Financial Documents**: Works with various layouts and formats.
-- **Consistent Data Structure**: Extracts date, category (aligned with accounting standards), description, and amount.
-- **Upload and process multiple file types** (Excel, CSV, PDF, Images)
-- **AI-powered transaction categorization** using OpenAI's API
-- **Interactive data visualization** with charts and tables
-- **Download categorized data** as Excel files
-- **Track upload history**
+Visit the live application at [Streamlit Community Cloud](https://financial-file-processor.streamlit.app)
 
 ## Requirements
 
 - Python 3.10 or higher
-- OpenAI API key (configured in Streamlit Cloud secrets)
+- OpenAI API key
 
 ## Installation
 
@@ -35,15 +30,17 @@ cd financial-file-processor
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure OpenAI API key in Streamlit Cloud secrets
-# Go to App Settings -> Secrets and add:
-# OPENAI_API_KEY = "your_api_key_here"
+# Set up your OpenAI API key
+# Option 1: Create a .env file
+echo "OPENAI_API_KEY=your_api_key_here" > .env
+
+# Option 2: Use the API Key Configuration page in the app
 ```
 
 ## Usage
 
 ```bash
-# Run the application locally (optional)
+# Run the application
 streamlit run app.py
 ```
 
@@ -51,12 +48,12 @@ Then open your browser and navigate to http://localhost:8501
 
 ## Deployment
 
-This application is designed for deployment to Streamlit Community Cloud:
+This application can be deployed to Streamlit Community Cloud:
 
 1. Fork this repository to your GitHub account
 2. Sign up for [Streamlit Community Cloud](https://streamlit.io/cloud)
 3. Create a new app and connect it to your forked repository
-4. Add your OpenAI API key to the Streamlit Cloud secrets (as shown in Installation)
+4. Add your OpenAI API key to the Streamlit Cloud secrets
 5. Deploy the app
 
 ## File Structure
@@ -68,16 +65,18 @@ financial_app/
 ├── .gitignore              # Git ignore file
 ├── README.md               # This file
 ├── create_sample_data.py   # Script to generate sample data
+├── create_secrets.py       # Script to create secrets.toml
 ├── visualization.py        # Data visualization components
 ├── download.py             # Download functionality
 ├── history.py              # Upload history management
+├── pages/
+│   └── api_key_config.py   # API key configuration page
 ├── parsers/
 │   ├── excel_parser.py     # Excel file parser
 │   ├── csv_parser.py       # CSV file parser
 │   ├── pdf_parser.py       # PDF file parser
 │   ├── image_parser.py     # Image file parser
-│   ├── openai_integration.py # OpenAI API integration
-│   └── gpt_parser.py       # REVISED: GPT-powered table transformation parser (with aligned categories)
+│   └── openai_integration.py # OpenAI API integration
 ├── uploads/                # Directory for uploaded files
 └── data/                   # Directory for processed data
     ├── sample_financial_data.csv  # Sample data for testing
@@ -95,5 +94,3 @@ MIT
 - [OpenAI](https://openai.com/)
 - [Pandas](https://pandas.pydata.org/)
 - [Matplotlib](https://matplotlib.org/)
-
-Last updated: 2025-04-28

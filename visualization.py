@@ -1,224 +1,215 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+#!/usr/bin/env python3
 import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import numpy as np
-from io import BytesIO
-
-def create_summary_charts(df):
-    """
-    Create summary charts for financial data visualization.
-    
-    Args:
-        df (pandas.DataFrame): DataFrame with categorized transaction data
-            Must contain 'amount' and 'category' columns
-            
-    Returns:
-        dict: Dictionary containing various chart figures
-    """
-    charts = {}
-    
-    # Ensure we have data to visualize
-    if df is None or df.empty:
-        return charts
-    
-    # Group by category and calculate sum
-    category_summary = df.groupby('category')['amount'].agg(['sum', 'count']).reset_index()
-    category_summary = category_summary.sort_values('sum', ascending=False)
-    
-    # Create color palette - green for revenue, red for expenses, blue for others
-    colors = []
-    for category in category_summary['category']:
-        if 'Revenue' in category:
-            colors.append('#28a745')  # Green
-        elif 'Expenses' in category:
-            colors.append('#dc3545')  # Red
-        else:
-            colors.append('#007bff')  # Blue
-    
-    # 1. Bar chart for category totals
-    fig1, ax1 = plt.subplots(figsize=(10, 6))
-    bars = ax1.bar(category_summary['category'], category_summary['sum'], color=colors)
-    
-    # Add data labels
-    for bar in bars:
-        height = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width()/2., height,
-                f'${height:.2f}',
-                ha='center', va='bottom', rotation=0)
-    
-    ax1.set_xlabel('Category')
-    ax1.set_ylabel('Amount ($)')
-    ax1.set_title('Financial Summary by Category')
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    charts['category_totals'] = fig1
-    
-    # 2. Pie chart for category distribution
-    fig2, ax2 = plt.subplots(figsize=(10, 8))
-    wedges, texts, autotexts = ax2.pie(
-        category_summary['sum'], 
-        labels=category_summary['category'],
-        autopct='%1.1f%%',
-        startangle=90,
-        colors=colors
-    )
-    
-    # Make text more readable
-    for text in texts:
-        text.set_fontsize(9)
-    for autotext in autotexts:
-        autotext.set_fontsize(9)
-        autotext.set_color('white')
-    
-    ax2.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
-    ax2.set_title('Proportion of Spending by Category')
-    plt.tight_layout()
-    charts['category_pie'] = fig2
-    
-    # 3. Revenue vs Expenses bar chart
-    revenue = df[df['category'].str.contains('Revenue')]['amount'].sum()
-    expenses = df[df['category'].str.contains('Expenses')]['amount'].sum()
-    other = df[~(df['category'].str.contains('Revenue') | df['category'].str.contains('Expenses'))]['amount'].sum()
-    
-    summary_data = pd.DataFrame({
-        'Category': ['Revenue', 'Expenses', 'Other'],
-        'Amount': [revenue, expenses, other]
-    })
-    
-    fig3, ax3 = plt.subplots(figsize=(8, 6))
-    summary_bars = ax3.bar(
-        summary_data['Category'], 
-        summary_data['Amount'],
-        color=['#28a745', '#dc3545', '#007bff']
-    )
-    
-    # Add data labels
-    for bar in summary_bars:
-        height = bar.get_height()
-        ax3.text(bar.get_x() + bar.get_width()/2., height,
-                f'${height:.2f}',
-                ha='center', va='bottom', rotation=0)
-    
-    ax3.set_xlabel('Category')
-    ax3.set_ylabel('Amount ($)')
-    ax3.set_title('Revenue vs Expenses Summary')
-    plt.tight_layout()
-    charts['revenue_expenses'] = fig3
-    
-    # 4. Transaction count by category
-    fig4, ax4 = plt.subplots(figsize=(10, 6))
-    count_bars = ax4.bar(category_summary['category'], category_summary['count'], color='#17a2b8')
-    
-    # Add data labels
-    for bar in count_bars:
-        height = bar.get_height()
-        ax4.text(bar.get_x() + bar.get_width()/2., height,
-                f'{int(height)}',
-                ha='center', va='bottom', rotation=0)
-    
-    ax4.set_xlabel('Category')
-    ax4.set_ylabel('Number of Transactions')
-    ax4.set_title('Transaction Count by Category')
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    charts['transaction_count'] = fig4
-    
-    return charts
 
 def display_financial_dashboard(df):
     """
-    Display financial dashboard with charts and tables in Streamlit.
-    
-    Args:
-        df (pandas.DataFrame): DataFrame with categorized transaction data
-    """
-    if df is None or df.empty:
-        st.warning("No data available to display.")
-        return
-    
-    # Display summary statistics
-    st.subheader("Financial Summary")
-    
-    # Calculate key metrics
-    total_transactions = len(df)
-    total_amount = df['amount'].sum()
-    avg_transaction = df['amount'].mean()
-    
-    # Create columns for metrics
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Transactions", f"{total_transactions}")
-    with col2:
-        st.metric("Total Amount", f"${total_amount:.2f}")
-    with col3:
-        st.metric("Average Transaction", f"${avg_transaction:.2f}")
-    
-    # Create and display charts
-    charts = create_summary_charts(df)
-    
-    # Display Revenue vs Expenses chart
-    if 'revenue_expenses' in charts:
-        st.subheader("Revenue vs Expenses")
-        st.pyplot(charts['revenue_expenses'])
-    
-    # Display Category Totals chart
-    if 'category_totals' in charts:
-        st.subheader("Amount by Category")
-        st.pyplot(charts['category_totals'])
-    
-    # Display Category Pie chart
-    if 'category_pie' in charts:
-        st.subheader("Spending Distribution")
-        st.pyplot(charts['category_pie'])
-    
-    # Display Transaction Count chart
-    if 'transaction_count' in charts:
-        st.subheader("Transaction Count by Category")
-        st.pyplot(charts['transaction_count'])
-    
-    # Display detailed transaction table
-    st.subheader("Transaction Details")
-    st.dataframe(df)
+    Display an enhanced, modern financial dashboard with filtering and two-level categorization.
 
-def generate_excel_report(df):
-    """
-    Generate an Excel report with categorized data and charts.
-    
     Args:
-        df (pandas.DataFrame): DataFrame with categorized transaction data
-            
-    Returns:
-        bytes: Excel file as bytes
+        df (pd.DataFrame): DataFrame containing financial data with columns 
+                           ["date", "description", "amount", "main_category", "subcategory"].
     """
+    st.header("📊 Financial Dashboard")
+
     if df is None or df.empty:
-        return None
-    
-    # Create a BytesIO object to store the Excel file
-    output = BytesIO()
-    
-    # Create Excel writer
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # Write transaction data to sheet
-        df.to_excel(writer, sheet_name='Transactions', index=False)
+        st.warning("No data available to display. Please upload a file first.")
+        return
+
+    # --- Data Preparation & Cleaning ---
+    try:
+        df_processed = df.copy()
+        # Ensure correct data types
+        df_processed["date"] = pd.to_datetime(df_processed["date"], errors="coerce")
+        df_processed["amount"] = pd.to_numeric(df_processed["amount"], errors="coerce")
+        df_processed["main_category"] = df_processed["main_category"].astype(str).fillna("Uncategorized")
+        df_processed["subcategory"] = df_processed["subcategory"].astype(str).fillna("Unknown")
         
-        # Create summary sheet
-        summary = pd.DataFrame({
-            'Metric': ['Total Transactions', 'Total Amount', 'Average Transaction'],
-            'Value': [
-                len(df),
-                df['amount'].sum(),
-                df['amount'].mean()
-            ]
-        })
-        summary.to_excel(writer, sheet_name='Summary', index=False)
+        # Drop rows where essential data couldn't be parsed
+        df_processed.dropna(subset=["date", "amount"], inplace=True)
         
-        # Create category summary
-        category_summary = df.groupby('category')['amount'].agg(['sum', 'count']).reset_index()
-        category_summary.columns = ['Category', 'Total Amount', 'Transaction Count']
-        category_summary = category_summary.sort_values('Total Amount', ascending=False)
-        category_summary.to_excel(writer, sheet_name='Category Summary', index=False)
+        if df_processed.empty:
+            st.warning("No valid financial data found after cleaning. Please check the input file format and content.")
+            return
+            
+        df_processed["year_month"] = df_processed["date"].dt.to_period("M").astype(str) # For grouping
+        df_processed["year"] = df_processed["date"].dt.year.astype(str)
+        
+    except Exception as e:
+        st.error(f"Error preparing data for visualization: {e}")
+        st.dataframe(df) # Show raw data for debugging
+        return
+
+    # --- Sidebar Filters ---
+    st.sidebar.header("Dashboard Filters")
     
-    # Get the value of the BytesIO buffer
-    output.seek(0)
-    return output.getvalue()
+    # Date Range Filter
+    min_date = df_processed["date"].min().date()
+    max_date = df_processed["date"].max().date()
+    
+    # Check if min_date and max_date are the same
+    if min_date == max_date:
+        # Set a default range, e.g., the single day
+        date_range = st.sidebar.date_input(
+            "Select Date Range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+            key="date_filter"
+        )
+    else:
+         date_range = st.sidebar.date_input(
+            "Select Date Range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+            key="date_filter"
+        )
+
+    # Handle case where user might select end_date before start_date
+    if len(date_range) == 2:
+        start_date, end_date = date_range
+        if start_date > end_date:
+            st.sidebar.warning("End date cannot be before start date. Adjusting...")
+            start_date, end_date = end_date, start_date # Swap them
+    else: # Handle case where only one date might be selected initially
+        start_date = min_date
+        end_date = max_date
+        st.sidebar.info("Select both a start and end date for filtering.")
+
+    # Main Category Filter
+    all_main_categories = sorted(df_processed["main_category"].unique())
+    selected_main_categories = st.sidebar.multiselect(
+        "Filter by Main Category",
+        options=all_main_categories,
+        default=all_main_categories,
+        key="main_cat_filter"
+    )
+    
+    # Subcategory Filter (dynamic based on main category selection)
+    if not selected_main_categories:
+         selected_main_categories = all_main_categories # Avoid error if nothing selected
+         
+    available_subcategories = sorted(df_processed[df_processed["main_category"].isin(selected_main_categories)]["subcategory"].unique())
+    selected_subcategories = st.sidebar.multiselect(
+        "Filter by Subcategory",
+        options=available_subcategories,
+        default=available_subcategories,
+        key="sub_cat_filter"
+    )
+    if not selected_subcategories:
+        selected_subcategories = available_subcategories # Avoid error if nothing selected
+
+    # --- Apply Filters ---
+    filtered_df = df_processed[
+        (df_processed["date"].dt.date >= start_date) &
+        (df_processed["date"].dt.date <= end_date) &
+        (df_processed["main_category"].isin(selected_main_categories)) &
+        (df_processed["subcategory"].isin(selected_subcategories))
+    ].copy()
+
+    if filtered_df.empty:
+        st.warning("No data matches the selected filters.")
+        return
+
+    # --- Key Metrics ---
+    st.subheader("Key Metrics (Filtered Period)")
+    total_revenue = filtered_df[filtered_df["main_category"] == "Revenue"]["amount"].sum()
+    total_expenses = filtered_df[filtered_df["main_category"] == "Expenses"]["amount"].sum() # Expenses are negative
+    net_income = total_revenue + total_expenses # Since expenses are negative
+    total_assets_value = filtered_df[filtered_df["main_category"] == "Assets"]["amount"].sum()
+    total_liabilities_value = filtered_df[filtered_df["main_category"] == "Liabilities"]["amount"].sum()
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Revenue", f"${total_revenue:,.2f}")
+    col2.metric("Expenses", f"${abs(total_expenses):,.2f}")
+    col3.metric("Net Income", f"${net_income:,.2f}", delta=f"{net_income:,.2f}")
+    
+    # Optional: Show Assets/Liabilities if present
+    if total_assets_value != 0 or total_liabilities_value != 0:
+        col4, col5 = st.columns(2)
+        if total_assets_value != 0:
+             col4.metric("Assets Value Change", f"${total_assets_value:,.2f}")
+        if total_liabilities_value != 0:
+             col5.metric("Liabilities Value Change", f"${total_liabilities_value:,.2f}")
+
+    st.divider()
+
+    # --- Charts --- 
+    st.subheader("Visualizations (Filtered Period)")
+    
+    # Layout columns for charts
+    chart_col1, chart_col2 = st.columns(2)
+
+    # 1. Income vs Expenses Over Time (Monthly Bar Chart)
+    with chart_col1:
+        try:
+            monthly_summary = filtered_df.groupby("year_month").agg(
+                Revenue=("amount", lambda x: x[x > 0].sum()),
+                Expenses=("amount", lambda x: abs(x[x < 0].sum())) # Use absolute for plotting
+            ).reset_index()
+            
+            fig_monthly = px.bar(monthly_summary, x="year_month", y=["Revenue", "Expenses"], 
+                                 title="Monthly Revenue vs Expenses", barmode=\'group\',
+                                 labels={"year_month": "Month", "value": "Amount ($)", "variable": "Type"},
+                                 color_discrete_map={"Revenue": "#2ca02c", "Expenses": "#d62728"})
+            fig_monthly.update_layout(legend_title_text=\'Category\')
+            st.plotly_chart(fig_monthly, use_container_width=True)
+        except Exception as e:
+            st.warning(f"Could not generate Monthly Revenue vs Expenses chart: {e}")
+
+    # 2. Expense Breakdown by Main Category (Treemap)
+    with chart_col2:
+        try:
+            expense_df = filtered_df[filtered_df["main_category"] == "Expenses"].copy()
+            if not expense_df.empty:
+                expense_df["amount_abs"] = expense_df["amount"].abs()
+                # Aggregate by main_category first, then subcategory for treemap path
+                expense_summary = expense_df.groupby(["main_category", "subcategory"])["amount_abs"].sum().reset_index()
+                
+                fig_expense_treemap = px.treemap(expense_summary, path=[px.Constant("Expenses"), \'main_category\', \'subcategory\'], values=\'amount_abs\',
+                                               title="Expense Breakdown (Main & Subcategories)",
+                                               color=\'main_category\', # Color by main category
+                                               color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig_expense_treemap.update_traces(textinfo = "label+value+percent parent")
+                st.plotly_chart(fig_expense_treemap, use_container_width=True)
+            else:
+                st.info("No expense data in the selected period/filters.")
+        except Exception as e:
+            st.warning(f"Could not generate Expense Breakdown Treemap: {e}")
+
+    # 3. Revenue Breakdown by Subcategory (Pie Chart)
+    try:
+        revenue_df = filtered_df[filtered_df["main_category"] == "Revenue"].copy()
+        if not revenue_df.empty:
+            revenue_summary = revenue_df.groupby("subcategory")["amount"].sum().reset_index()
+            revenue_summary = revenue_summary[revenue_summary["amount"] > 0] # Ensure positive amounts for pie
+            
+            if not revenue_summary.empty:
+                fig_revenue_pie = px.pie(revenue_summary, values=\'amount\', names=\'subcategory\',
+                                       title="Revenue Sources by Subcategory",
+                                       hole=0.3)
+                fig_revenue_pie.update_traces(textposition=\'inside\', textinfo=\'percent+label\')
+                st.plotly_chart(fig_revenue_pie, use_container_width=True)
+            else:
+                st.info("No revenue data in the selected period/filters.")
+        else:
+            st.info("No revenue data in the selected period/filters.")
+    except Exception as e:
+        st.warning(f"Could not generate Revenue Breakdown Pie Chart: {e}")
+
+    st.divider()
+
+    # --- Data Table ---
+    st.subheader("Filtered Data Table")
+    # Select and order columns for display
+    display_columns = ["date", "description", "main_category", "subcategory", "amount"]
+    # Ensure columns exist before selecting
+    display_columns = [col for col in display_columns if col in filtered_df.columns]
+    
+    st.dataframe(filtered_df[display_columns].sort_values(by="date"), use_container_width=True)
+
+
