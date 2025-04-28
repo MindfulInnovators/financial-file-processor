@@ -1,96 +1,102 @@
 # Financial File Processor
 
-A Python-based web application that allows users to upload financial files (Excel, CSV, PDF, or Images), extracts structured data, and categorizes transactions using AI.
+A Python-based web application for processing financial files with AI-powered categorization and visualization.
 
 ## Features
 
-- Upload and process multiple file types (Excel, CSV, PDF, Images)
-- Extract structured financial data (description, amount, date)
-- AI-powered transaction categorization using OpenAI's API
-- Interactive data visualization with charts and tables
-- Download categorized data as Excel files
-- Track upload history
+- **File Upload**: Support for Excel, CSV, PDF, and image files
+- **Intelligent Parsing**: Extract structured data from various financial document formats
+- **Two-Level Categorization**: AI-powered categorization with main categories and subcategories
+- **Interactive Dashboard**: Modern visualization with filtering capabilities
+- **Download**: Export categorized data as Excel files
+- **Upload History**: Track previous file uploads
 
-## Demo
+## Modern Dashboard Features
 
-Visit the live application at [Streamlit Community Cloud](https://financial-file-processor.streamlit.app)
-
-## Requirements
-
-- Python 3.10 or higher
-- OpenAI API key
+- Interactive charts using Plotly
+- Date range filtering
+- Category and subcategory filtering
+- Treemap visualization for expense breakdown
+- Pie chart for revenue sources
+- Key financial metrics display
+- Responsive design
 
 ## Installation
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/financial-file-processor.git
-cd financial-file-processor
+### Prerequisites
 
-# Install dependencies
-pip install -r requirements.txt
+- Python 3.8+
+- OpenAI API key
 
-# Set up your OpenAI API key
-# Option 1: Create a .env file
-echo "OPENAI_API_KEY=your_api_key_here" > .env
+### Local Setup
 
-# Option 2: Use the API Key Configuration page in the app
-```
+1. Clone this repository
+2. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+3. Create a `.env` file with your OpenAI API key:
+   ```
+   OPENAI_API_KEY=your_api_key_here
+   ```
+4. Run the initialization script:
+   ```
+   ./init.sh
+   ```
 
 ## Usage
 
-```bash
-# Run the application
-streamlit run app.py
-```
+1. Start the application:
+   ```
+   ./run_app.sh
+   ```
+   Or manually:
+   ```
+   streamlit run app.py
+   ```
+2. Open your browser and navigate to the URL shown in the terminal (typically http://localhost:8501)
+3. Upload a financial file using the sidebar uploader
+4. Select whether to use the GPT-powered intelligent parser
+5. View extracted data in the "Extracted Data" tab
+6. Explore the interactive dashboard in the "Categorized Data" tab
+7. Download the categorized data using the download button
 
-Then open your browser and navigate to http://localhost:8501
+## Deployment to Streamlit Cloud
 
-## Deployment
+1. Create a GitHub repository with your application code
+2. Sign up for Streamlit Community Cloud (it's free)
+3. Connect your GitHub repository to Streamlit Community Cloud
+4. Set the main file path to "app.py"
+5. Add your OpenAI API key to the Streamlit Cloud secrets in this format:
+   ```
+   OPENAI_API_KEY = "your_api_key_here"
+   ```
 
-This application can be deployed to Streamlit Community Cloud:
+## GPT-Powered Intelligent Parser
 
-1. Fork this repository to your GitHub account
-2. Sign up for [Streamlit Community Cloud](https://streamlit.io/cloud)
-3. Create a new app and connect it to your forked repository
-4. Add your OpenAI API key to the Streamlit Cloud secrets
-5. Deploy the app
+The application includes a powerful GPT-based parser that can:
+
+- Automatically detect document type (transaction list, profit and loss, balance sheet)
+- Extract structured data from complex financial documents
+- Organize data with two-level categorization (main_category and subcategory)
+- Handle various formats and layouts
 
 ## File Structure
 
-```
-financial_app/
-├── app.py                  # Main application file
-├── requirements.txt        # Python dependencies
-├── .gitignore              # Git ignore file
-├── README.md               # This file
-├── create_sample_data.py   # Script to generate sample data
-├── create_secrets.py       # Script to create secrets.toml
-├── visualization.py        # Data visualization components
-├── download.py             # Download functionality
-├── history.py              # Upload history management
-├── pages/
-│   └── api_key_config.py   # API key configuration page
-├── parsers/
-│   ├── excel_parser.py     # Excel file parser
-│   ├── csv_parser.py       # CSV file parser
-│   ├── pdf_parser.py       # PDF file parser
-│   ├── image_parser.py     # Image file parser
-│   └── openai_integration.py # OpenAI API integration
-├── uploads/                # Directory for uploaded files
-└── data/                   # Directory for processed data
-    ├── sample_financial_data.csv  # Sample data for testing
-    ├── sample_financial_data.xlsx # Sample data for testing
-    └── upload_history.json        # Upload history storage
-```
+- `app.py`: Main Streamlit application
+- `parsers/`: File parsing modules
+  - `excel_parser.py`: Excel file parser
+  - `csv_parser.py`: CSV file parser
+  - `pdf_parser.py`: PDF file parser
+  - `image_parser.py`: Image file parser (OCR)
+  - `openai_integration.py`: OpenAI API integration
+  - `gpt_parser.py`: GPT-powered intelligent parser
+- `visualization.py`: Data visualization components
+- `download.py`: Download functionality
+- `history.py`: Upload history management
+- `data/`: Directory for sample data and history
+- `uploads/`: Directory for uploaded files
 
 ## License
 
-MIT
-
-## Acknowledgements
-
-- [Streamlit](https://streamlit.io/)
-- [OpenAI](https://openai.com/)
-- [Pandas](https://pandas.pydata.org/)
-- [Matplotlib](https://matplotlib.org/)
+This project is licensed under the MIT License - see the LICENSE file for details.

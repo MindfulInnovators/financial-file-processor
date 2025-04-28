@@ -153,10 +153,10 @@ def display_financial_dashboard(df):
             ).reset_index()
             
             fig_monthly = px.bar(monthly_summary, x="year_month", y=["Revenue", "Expenses"], 
-                                 title="Monthly Revenue vs Expenses", barmode=\'group\',
+                                 title="Monthly Revenue vs Expenses", barmode='group',
                                  labels={"year_month": "Month", "value": "Amount ($)", "variable": "Type"},
                                  color_discrete_map={"Revenue": "#2ca02c", "Expenses": "#d62728"})
-            fig_monthly.update_layout(legend_title_text=\'Category\')
+            fig_monthly.update_layout(legend_title_text='Category')
             st.plotly_chart(fig_monthly, use_container_width=True)
         except Exception as e:
             st.warning(f"Could not generate Monthly Revenue vs Expenses chart: {e}")
@@ -170,9 +170,9 @@ def display_financial_dashboard(df):
                 # Aggregate by main_category first, then subcategory for treemap path
                 expense_summary = expense_df.groupby(["main_category", "subcategory"])["amount_abs"].sum().reset_index()
                 
-                fig_expense_treemap = px.treemap(expense_summary, path=[px.Constant("Expenses"), \'main_category\', \'subcategory\'], values=\'amount_abs\',
+                fig_expense_treemap = px.treemap(expense_summary, path=[px.Constant("Expenses"), 'main_category', 'subcategory'], values='amount_abs',
                                                title="Expense Breakdown (Main & Subcategories)",
-                                               color=\'main_category\', # Color by main category
+                                               color='main_category', # Color by main category
                                                color_discrete_sequence=px.colors.qualitative.Pastel)
                 fig_expense_treemap.update_traces(textinfo = "label+value+percent parent")
                 st.plotly_chart(fig_expense_treemap, use_container_width=True)
@@ -189,10 +189,10 @@ def display_financial_dashboard(df):
             revenue_summary = revenue_summary[revenue_summary["amount"] > 0] # Ensure positive amounts for pie
             
             if not revenue_summary.empty:
-                fig_revenue_pie = px.pie(revenue_summary, values=\'amount\', names=\'subcategory\',
+                fig_revenue_pie = px.pie(revenue_summary, values='amount', names='subcategory',
                                        title="Revenue Sources by Subcategory",
                                        hole=0.3)
-                fig_revenue_pie.update_traces(textposition=\'inside\', textinfo=\'percent+label\')
+                fig_revenue_pie.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig_revenue_pie, use_container_width=True)
             else:
                 st.info("No revenue data in the selected period/filters.")
@@ -211,5 +211,3 @@ def display_financial_dashboard(df):
     display_columns = [col for col in display_columns if col in filtered_df.columns]
     
     st.dataframe(filtered_df[display_columns].sort_values(by="date"), use_container_width=True)
-
-
