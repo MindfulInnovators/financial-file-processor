@@ -1,6 +1,8 @@
 import streamlit as st
 import os
+import json
 import pandas as pd
+import matplotlib.pyplot as plt
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -11,6 +13,7 @@ from parsers.csv_parser import parse_csv
 from parsers.pdf_parser import parse_pdf
 from parsers.image_parser import parse_image
 from parsers.openai_integration import categorize_transactions
+from parsers.gpt_parser import parse_with_gpt  # Import the new GPT parser
 from visualization import display_financial_dashboard
 from download import add_download_button
 from history import save_upload_history, display_upload_history
@@ -33,6 +36,8 @@ if 'categorized_data' not in st.session_state:
     st.session_state.categorized_data = None
 if 'file_uploaded' not in st.session_state:
     st.session_state.file_uploaded = False
+if 'use_gpt_parser' not in st.session_state:
+    st.session_state.use_gpt_parser = True  # Default to using GPT parser
 
 def process_uploaded_file(uploaded_file):
     """Process the uploaded file based on its type"""
@@ -45,18 +50,23 @@ def process_uploaded_file(uploaded_file):
     with open(file_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
     
-    # Parse the file based on its type
-    if file_type in ['xlsx', 'xls']:
-        transactions = parse_excel(file_path)
-    elif file_type == 'csv':
-        transactions = parse_csv(file_path)
-    elif file_type == 'pdf':
-        transactions = parse_pdf(file_path)
-    elif file_type in ['jpg', 'jpeg', 'png']:
-        transactions = parse_image(file_path)
+    # Parse the file based on user preference
+    if st.session_state.use_gpt_parser:
+        # Use the GPT-powered parser for intelligent extraction
+        transactions = parse_with_gpt(file_path)
     else:
-        st.error(f"Unsupported file type: {file_type}")
-        return None
+        # Use the traditional parsers
+        if file_type in ['xlsx', 'xls']:
+            transactions = parse_excel(file_path)
+        elif file_type == 'csv':
+            transactions = parse_csv(file_path)
+        elif file_type == 'pdf':
+            transactions = parse_pdf(file_path)
+        elif file_type in ['jpg', 'jpeg', 'png']:
+            transactions = parse_image(file_path)
+        else:
+            st.error(f"Unsupported file type: {file_type}")
+            return None
     
     # Save upload history
     save_upload_history(filename, file_type)
@@ -84,6 +94,16 @@ def main():
         
         st.divider()
         
+        # Parser selection
+        st.subheader("Parser Options")
+        st.session_state.use_gpt_parser = st.checkbox(
+            "Use GPT-powered intelligent parser", 
+            value=st.session_state.use_gpt_parser,
+            help="Enable to use GPT for intelligent extraction from complex financial documents like profit and loss statements and balance sheets"
+        )
+        
+        st.divider()
+        
         # API Key configuration
         st.subheader("OpenAI API Configuration")
         api_key = os.getenv("OPENAI_API_KEY")
@@ -91,7 +111,7 @@ def main():
             st.success("API Key configured ✅")
         else:
             st.warning("API Key not found. Please add your OpenAI API key to the .env file.")
-            st.info("You can copy the .env.example file to .env and add your API key.")
+            st.info("You can use the API Key Config page to add your API key.")
         
         st.divider()
         
@@ -113,7 +133,7 @@ def main():
                 
                 st.session_state.file_uploaded = True
                 st.success("File processed successfully!")
-                st.experimental_rerun()
+                st.rerun()
     
     # Main content area
     if st.session_state.transactions is not None:
@@ -139,7 +159,7 @@ def main():
             st.session_state.transactions = None
             st.session_state.categorized_data = None
             st.session_state.file_uploaded = False
-            st.experimental_rerun()
+            st.rerun()
     
     # Footer
     st.divider()

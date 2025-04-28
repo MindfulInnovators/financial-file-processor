@@ -1,4 +1,29 @@
-# Enhanced Financial File Processor
+import os
+import shutil
+import zipfile
+from datetime import datetime
+
+# Define directories
+project_dir = "/home/ubuntu/financial_app"
+output_dir = "/home/ubuntu"
+output_filename = "financial_app_enhanced.zip"
+
+# Create a temporary directory for the enhanced version
+temp_dir = os.path.join(output_dir, "financial_app_enhanced")
+os.makedirs(temp_dir, exist_ok=True)
+
+# Copy all files from the project directory to the temporary directory
+for item in os.listdir(project_dir):
+    source = os.path.join(project_dir, item)
+    destination = os.path.join(temp_dir, item)
+    
+    if os.path.isdir(source):
+        shutil.copytree(source, destination, dirs_exist_ok=True)
+    else:
+        shutil.copy2(source, destination)
+
+# Create a README file specifically for the enhanced version
+readme_content = f"""# Enhanced Financial File Processor
 
 A Python-based web application that allows users to upload financial files (Excel, CSV, PDF, or Images), extracts structured data, and categorizes transactions using AI.
 
@@ -114,4 +139,37 @@ MIT
 - [Pandas](https://pandas.pydata.org/)
 - [Matplotlib](https://matplotlib.org/)
 
-Last updated: 2025-04-28
+Last updated: {datetime.now().strftime("%Y-%m-%d")}
+"""
+
+# Write the enhanced README
+with open(os.path.join(temp_dir, "README.md"), "w") as f:
+    f.write(readme_content)
+
+# Update requirements.txt to include all necessary packages
+requirements_content = """pandas
+openpyxl
+pdfplumber
+pytesseract
+streamlit
+python-dotenv
+matplotlib
+seaborn
+openai
+Pillow
+numpy
+"""
+
+with open(os.path.join(temp_dir, "requirements.txt"), "w") as f:
+    f.write(requirements_content)
+
+# Create a zip file of the enhanced project
+output_path = os.path.join(output_dir, output_filename)
+with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+    for root, dirs, files in os.walk(temp_dir):
+        for file in files:
+            file_path = os.path.join(root, file)
+            arcname = os.path.relpath(file_path, temp_dir)
+            zipf.write(file_path, arcname)
+
+print(f"Enhanced project packaged successfully: {output_path}")

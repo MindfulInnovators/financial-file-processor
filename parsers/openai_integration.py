@@ -18,8 +18,16 @@ def categorize_transactions(transactions_df):
         pandas.DataFrame: Original DataFrame with added 'category' column
     """
     try:
-        # Get API key from environment variable
+        # Get API key from environment variable or Streamlit secrets
         api_key = os.getenv("OPENAI_API_KEY")
+        
+        # For Streamlit Cloud, try to get from st.secrets
+        if not api_key:
+            try:
+                import streamlit as st
+                api_key = st.secrets["OPENAI_API_KEY"]
+            except:
+                pass
         
         if not api_key:
             print("Warning: OpenAI API key not found. Using placeholder categories.")
@@ -86,7 +94,24 @@ def categorize_transactions(transactions_df):
         # Extract categories from response
         try:
             import json
-            categories = json.loads(response.choices[0].message.content)["categories"]
+            response_content = response.choices[0].message.content
+            print(f"API Response: {response_content}")  # Debug output
+            
+            # Parse the JSON response
+            response_json = json.loads(response_content)
+            
+            # Check if 'categories' key exists
+            if 'categories' in response_json:
+                categories = response_json["categories"]
+            else:
+                # If not, try to use the first array found in the response
+                for key, value in response_json.items():
+                    if isinstance(value, list):
+                        categories = value
+                        break
+                else:
+                    # If no array found, raise an error
+                    raise KeyError("No categories array found in response")
             
             # Ensure we have the right number of categories
             if len(categories) == len(result_df):
@@ -96,6 +121,7 @@ def categorize_transactions(transactions_df):
                 result_df['category'] = "Uncategorized"
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Error parsing API response: {e}")
+            print(f"Response content: {response.choices[0].message.content}")
             result_df['category'] = "Uncategorized"
         
         return result_df
