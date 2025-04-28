@@ -1,0 +1,10 @@
+pandas
+openpyxl
+pdfplumber
+pytesseract
+streamlit
+python-dotenv
+matplotlib
+seaborn
+openai
+Pillow
