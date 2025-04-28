@@ -104,14 +104,22 @@ def main():
         
         st.divider()
         
-        # API Key configuration
+        # API Key configuration status
         st.subheader("OpenAI API Configuration")
-        api_key = os.getenv("OPENAI_API_KEY")
-        if api_key:
+        # Check if API key is likely configured (via env var or st.secrets)
+        api_key_present = os.getenv("OPENAI_API_KEY") is not None
+        if not api_key_present:
+            try:
+                import streamlit as st
+                if "OPENAI_API_KEY" in st.secrets:
+                    api_key_present = True
+            except:
+                pass # st.secrets might not be available locally
+
+        if api_key_present:
             st.success("API Key configured ✅")
         else:
-            st.warning("API Key not found. Please add your OpenAI API key to the .env file.")
-            st.info("You can use the API Key Config page to add your API key.")
+            st.warning("API Key not found. Please configure it in Streamlit Cloud secrets.")
         
         st.divider()
         
