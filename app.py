@@ -110,8 +110,8 @@ def main():
         api_key_present = os.getenv("OPENAI_API_KEY") is not None
         if not api_key_present:
             try:
-                import streamlit as st
-                if "OPENAI_API_KEY" in st.secrets:
+                # Check if API key exists in Streamlit secrets without reimporting
+                if hasattr(st, 'secrets') and "OPENAI_API_KEY" in st.secrets:
                     api_key_present = True
             except:
                 pass # st.secrets might not be available locally
