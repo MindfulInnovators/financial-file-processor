@@ -1,12 +1,19 @@
 import streamlit as st
 import os
+import json
 import pandas as pd
+import matplotlib.pyplot as plt
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
 # Import custom modules
-from parsers.gpt_parser import parse_with_gpt  # Only import the GPT parser
+from parsers.excel_parser import parse_excel
+from parsers.csv_parser import parse_csv
+from parsers.pdf_parser import parse_pdf
+from parsers.image_parser import parse_image
+from parsers.openai_integration import categorize_transactions
+from parsers.gpt_parser import parse_with_gpt  # Import the new GPT parser
 from visualization import display_financial_dashboard
 from download import add_download_button
 from history import save_upload_history, display_upload_history
@@ -23,14 +30,18 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # Initialize session state
-if "processed_data" not in st.session_state:
-    st.session_state.processed_data = None
-if "file_uploaded" not in st.session_state:
+if 'transactions' not in st.session_state:
+    st.session_state.transactions = None
+if 'categorized_data' not in st.session_state:
+    st.session_state.categorized_data = None
+if 'file_uploaded' not in st.session_state:
     st.session_state.file_uploaded = False
+if 'use_gpt_parser' not in st.session_state:
+    st.session_state.use_gpt_parser = True  # Default to using GPT parser
 
 def process_uploaded_file(uploaded_file):
-    """Process the uploaded file using the GPT parser."""
-    file_type = uploaded_file.name.split(".")[-1].lower()
+    """Process the uploaded file based on its type"""
+    file_type = uploaded_file.name.split('.')[-1].lower()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{timestamp}_{uploaded_file.name}"
     file_path = os.path.join(UPLOAD_DIR, filename)
@@ -39,13 +50,28 @@ def process_uploaded_file(uploaded_file):
     with open(file_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
     
-    # Always use the GPT-powered parser
-    processed_data = parse_with_gpt(file_path)
+    # Parse the file based on user preference
+    if st.session_state.use_gpt_parser:
+        # Use the GPT-powered parser for intelligent extraction
+        transactions = parse_with_gpt(file_path)
+    else:
+        # Use the traditional parsers
+        if file_type in ['xlsx', 'xls']:
+            transactions = parse_excel(file_path)
+        elif file_type == 'csv':
+            transactions = parse_csv(file_path)
+        elif file_type == 'pdf':
+            transactions = parse_pdf(file_path)
+        elif file_type in ['jpg', 'jpeg', 'png']:
+            transactions = parse_image(file_path)
+        else:
+            st.error(f"Unsupported file type: {file_type}")
+            return None
     
     # Save upload history
     save_upload_history(filename, file_type)
     
-    return processed_data
+    return transactions
 
 def main():
     st.set_page_config(
@@ -56,14 +82,24 @@ def main():
     )
     
     st.title("Financial File Processor")
-    st.write("Upload financial files (Excel, CSV, PDF, or Image) to extract and structure data using AI")
+    st.write("Upload financial files to extract and categorize transactions using AI")
     
     # Sidebar for file upload and options
     with st.sidebar:
         st.header("Upload Files")
         uploaded_file = st.file_uploader(
-            "Choose a financial file", 
+            "Choose a financial file (Excel, CSV, PDF, or Image)", 
             type=["xlsx", "xls", "csv", "pdf", "jpg", "jpeg", "png"]
+        )
+        
+        st.divider()
+        
+        # Parser selection
+        st.subheader("Parser Options")
+        st.session_state.use_gpt_parser = st.checkbox(
+            "Use GPT-powered intelligent parser", 
+            value=st.session_state.use_gpt_parser,
+            help="Enable to use GPT for intelligent extraction from complex financial documents like profit and loss statements and balance sheets"
         )
         
         st.divider()
@@ -75,7 +111,7 @@ def main():
         if not api_key_present:
             try:
                 # Check if API key exists in Streamlit secrets without reimporting
-                if hasattr(st, "secrets") and "OPENAI_API_KEY" in st.secrets:
+                if hasattr(st, 'secrets') and "OPENAI_API_KEY" in st.secrets:
                     api_key_present = True
             except:
                 pass # st.secrets might not be available locally
@@ -92,39 +128,44 @@ def main():
     
     # Process uploaded file
     if uploaded_file is not None and not st.session_state.file_uploaded:
-        with st.spinner("Processing file with AI..."):
-            processed_data = process_uploaded_file(uploaded_file)
+        with st.spinner("Processing file..."):
+            transactions = process_uploaded_file(uploaded_file)
             
-            if processed_data is not None and not processed_data.empty:
-                st.session_state.processed_data = processed_data
+            if transactions is not None:
+                st.session_state.transactions = transactions
+                
+                # Categorize transactions using OpenAI
+                with st.spinner("Categorizing transactions with AI..."):
+                    categorized_data = categorize_transactions(transactions)
+                    st.session_state.categorized_data = categorized_data
+                
                 st.session_state.file_uploaded = True
                 st.success("File processed successfully!")
                 st.rerun()
-            elif processed_data is not None and processed_data.empty:
-                 st.error("AI processing returned no data. Please check the file content or API key.")
-                 st.session_state.file_uploaded = False # Allow re-upload
-            else:
-                 st.error("An error occurred during file processing.")
-                 st.session_state.file_uploaded = False # Allow re-upload
-
     
     # Main content area
-    if st.session_state.processed_data is not None:
-        # Display the dashboard using the processed data
-        display_financial_dashboard(st.session_state.processed_data)
+    if st.session_state.transactions is not None:
+        # Create tabs for different views
+        tab1, tab2 = st.tabs(["Extracted Data", "Categorized Data"])
         
-        # Add download button for the processed data
-        st.divider()
-        add_download_button(st.session_state.processed_data)
+        with tab1:
+            st.subheader("Extracted Transactions")
+            st.dataframe(st.session_state.transactions, use_container_width=True)
         
-        # Optionally display the raw extracted table
-        with st.expander("View Raw Extracted Data Table"):
-            st.dataframe(st.session_state.processed_data, use_container_width=True)
+        with tab2:
+            if st.session_state.categorized_data is not None:
+                # Display financial dashboard
+                display_financial_dashboard(st.session_state.categorized_data)
+                
+                # Add download button
+                st.divider()
+                add_download_button(st.session_state.categorized_data)
     
     # Reset button
     if st.session_state.file_uploaded:
         if st.button("Process Another File", type="primary"):
-            st.session_state.processed_data = None
+            st.session_state.transactions = None
+            st.session_state.categorized_data = None
             st.session_state.file_uploaded = False
             st.rerun()
     
@@ -134,4 +175,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

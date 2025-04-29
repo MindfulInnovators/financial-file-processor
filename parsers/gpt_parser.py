@@ -1,54 +1,20 @@
-import os
-import json
 import pandas as pd
-from datetime import datetime
-import base64
+import os
 from openai import OpenAI
+from dotenv import load_dotenv
+import json
+import io
+import openpyxl
+import csv
+from datetime import datetime
+
+# Load environment variables
+load_dotenv()
 
 class GPTFinancialParser:
     """
-    A streamlined parser that uses OpenAI's GPT-4 Vision model to directly process financial documents
-    of any format and extract structured financial data according to NZ accounting standards.
-    """
-    
-    # System prompt for financial extraction and consolidation
-    FINANCIAL_EXTRACTION_PROMPT = """
-    You are an expert financial data extraction and consolidation assistant specialising in New Zealand accounting standards.
-
-    Your task is to read the uploaded financial file — which may contain Profit and Loss Statements, Balance Sheets, Cashflow Statements, or financial transactions — and consolidate all available financial data into a single structured JSON table with these fields:
-    - HighLevelCategory (Revenue, Cost of Goods Sold, Operating Expenses, Assets, Liabilities, Equity, Cashflow, GST, Other)
-    - Subcategory (Specific subcategory name like Sales Revenue, Donations, Accounts Payable)
-    - Amount (numeric, no dollar signs, no commas)
-    - Entity (Department or Team Name if available; otherwise null)
-    - Period (e.g., 'March 2025', 'FY2024 Q1') if available; otherwise null
-    - Date (specific transaction date if available, otherwise null)
-    - GST_Treatment (Standard, Zero-Rated, Exempt, or Unknown)
-    - Currency (NZD)
-
-    Instructions:
-    - Consolidate multiple departments, time periods, and sheets if available.
-    - Categorise all line items according to New Zealand accounting practices.
-    - Always use New Zealand English spelling (e.g., categorise, organisation).
-    - If values are missing, set fields to null.
-    - Assume all amounts are in NZD unless stated otherwise.
-    - Only return strict JSON. No explanations, no commentary.
-    
-    Return ONLY a JSON object with the format:
-    {
-        "table_data": [
-            {
-                "HighLevelCategory": "Category name",
-                "Subcategory": "Subcategory name",
-                "Amount": 1234.56,
-                "Entity": "Department name or null",
-                "Period": "Period description or null",
-                "Date": "YYYY-MM-DD or null",
-                "GST_Treatment": "Standard/Zero-Rated/Exempt/Unknown",
-                "Currency": "NZD"
-            },
-            ...more rows...
-        ]
-    }
+    A flexible parser that uses OpenAI's GPT to transform unformatted financial documents
+    into structured tables with New Zealand-specific financial categorization.
     """
     
     def __init__(self):
@@ -71,79 +37,171 @@ class GPTFinancialParser:
         # Initialize OpenAI client
         self.client = OpenAI(api_key=api_key)
     
-    def parse_financial_document(self, file_path):
+    def extract_file_content(self, file_path):
+        """Extract content from file based on its extension."""
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+        
+        if ext in ['.xlsx', '.xls']:
+            return self._extract_excel_content(file_path)
+        elif ext == '.csv':
+            return self._extract_csv_content(file_path)
+        elif ext == '.pdf':
+            return self._extract_pdf_content(file_path)
+        elif ext in ['.jpg', '.jpeg', '.png']:
+            return self._extract_image_content(file_path)
+        else:
+            raise ValueError(f"Unsupported file type: {ext}")
+    
+    def _extract_excel_content(self, file_path):
+        """Extract content from Excel file."""
+        try:
+            # Read Excel file
+            df = pd.read_excel(file_path)
+            
+            # Convert to string representation
+            buffer = io.StringIO()
+            df.to_csv(buffer, index=False)
+            content = buffer.getvalue()
+            
+            # Also get sheet names and first few rows of each sheet for context
+            workbook = openpyxl.load_workbook(file_path, read_only=True)
+            sheet_info = []
+            
+            for sheet_name in workbook.sheetnames:
+                sheet = workbook[sheet_name]
+                rows = []
+                for i, row in enumerate(sheet.iter_rows(values_only=True)):
+                    if i >= 10:  # Get first 10 rows
+                        break
+                    rows.append(row)
+                sheet_info.append({
+                    "name": sheet_name,
+                    "sample_rows": rows
+                })
+            
+            return {
+                "main_content": content,
+                "sheet_info": sheet_info
+            }
+        except Exception as e:
+            raise ValueError(f"Error extracting Excel content: {e}")
+    
+    def _extract_csv_content(self, file_path):
+        """Extract content from CSV file."""
+        try:
+            with open(file_path, 'r') as f:
+                content = f.read()
+            return {"main_content": content}
+        except Exception as e:
+            raise ValueError(f"Error extracting CSV content: {e}")
+    
+    def _extract_pdf_content(self, file_path):
+        """Extract content from PDF file."""
+        try:
+            import pdfplumber
+            
+            content = ""
+            with pdfplumber.open(file_path) as pdf:
+                for page in pdf.pages:
+                    content += page.extract_text() + "\n\n"
+                    
+                    # Extract tables if any
+                    tables = page.extract_tables()
+                    if tables:
+                        content += "TABLES:\n"
+                        for table in tables:
+                            for row in table:
+                                content += ",".join([str(cell) if cell else "" for cell in row]) + "\n"
+                            content += "\n"
+            
+            return {"main_content": content}
+        except Exception as e:
+            raise ValueError(f"Error extracting PDF content: {e}")
+    
+    def _extract_image_content(self, file_path):
+        """Extract content from image file using OCR."""
+        try:
+            import pytesseract
+            from PIL import Image
+            
+            img = Image.open(file_path)
+            content = pytesseract.image_to_string(img)
+            
+            return {"main_content": content}
+        except Exception as e:
+            raise ValueError(f"Error extracting image content: {e}")
+    
+    def transform_to_structured_table(self, content):
         """
-        Parse a financial document using GPT-4 Vision to transform it into a structured table.
+        Use GPT to transform unformatted financial document content into a structured table
+        with New Zealand-specific financial categorization.
         
         Args:
-            file_path (str): Path to the financial document file
+            content (str): Raw content from the financial document
             
         Returns:
-            pandas.DataFrame: DataFrame with structured financial data
+            pandas.DataFrame: Structured table with standardized columns for NZ financial data
         """
         try:
-            print(f"Processing file: {file_path}")
+            # User-provided prompt for NZ-specific financial data extraction
+            prompt = f"""
+            Your task is to read the uploaded financial file — which may contain Profit and Loss Statements, Balance Sheets, Cashflow Statements, or financial transactions — and consolidate all available financial data into a single structured JSON table with these fields:
+            • HighLevelCategory (Revenue, Cost of Goods Sold, Operating Expenses, Assets, Liabilities, Equity, Cashflow, GST, Other)
+            • Subcategory (Specific subcategory name like Sales Revenue, Donations, Accounts Payable)
+            • Amount (numeric, no dollar signs, no commas)
+            • Entity (Department or Team Name if available; otherwise null)
+            • Period (e.g., 'March 2025', 'FY2024 Q1') if available; otherwise null
+            • Date (specific transaction date if available, otherwise null)
+            • GST_Treatment (Standard, Zero-Rated, Exempt, or Unknown)
+            • Currency (NZD)
+
+            Instructions:
+            • Consolidate multiple departments, time periods, and sheets if available.
+            • Categorise all line items according to New Zealand accounting practices.
+            • Always use New Zealand English spelling (e.g., categorise, organisation).
+            • If values are missing, set fields to null.
+            • Assume all amounts are in NZD unless stated otherwise.
+            • Only return strict JSON. No explanations, no commentary.
+
+            Return ONLY a JSON object with the format:
+            {{
+                "table_data": [
+                    {{
+                        "HighLevelCategory": "Category name",
+                        "Subcategory": "Subcategory name",
+                        "Amount": 1234.56,
+                        "Entity": "Department name or null",
+                        "Period": "Period description or null",
+                        "Date": "YYYY-MM-DD or null",
+                        "GST_Treatment": "Standard/Zero-Rated/Exempt/Unknown",
+                        "Currency": "NZD"
+                    }},
+                    ...more rows...
+                ]
+            }}
+
+            Document content:
+            {content[:8000]}  # Limit content to avoid token limits
+            """
             
-            # Read file as binary
-            with open(file_path, "rb") as file:
-                file_content = file.read()
+            print("Sending content to GPT for transformation with NZ-specific financial categorization...")
             
-            # Encode file content in base64
-            encoded_file = base64.b64encode(file_content).decode('utf-8')
-            
-            # Get file mime type based on extension
-            _, ext = os.path.splitext(file_path)
-            ext = ext.lower()
-            
-            if ext in ['.xlsx', '.xls']:
-                mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            elif ext == '.csv':
-                mime_type = "text/csv"
-            elif ext == '.pdf':
-                mime_type = "application/pdf"
-            elif ext in ['.jpg', '.jpeg']:
-                mime_type = "image/jpeg"
-            elif ext == '.png':
-                mime_type = "image/png"
-            else:
-                mime_type = "application/octet-stream"
-            
-            print(f"Sending file to OpenAI for processing (mime type: {mime_type})...")
-            
-            # Call OpenAI API with the file
             response = self.client.chat.completions.create(
-                model="gpt-4-vision-preview",  # Using Vision model to process any file type
+                model="gpt-4-turbo",
                 messages=[
-                    {"role": "system", "content": self.FINANCIAL_EXTRACTION_PROMPT},
-                    {"role": "user", "content": [
-                        {"type": "text", "text": "Please extract and structure the financial data from the attached file."},
-                        {"type": "image_url", 
-                         "image_url": {
-                             "url": f"data:{mime_type};base64,{encoded_file}",
-                             "detail": "high"
-                         }}
-                    ]}
+                    {"role": "system", "content": "You are a financial data extraction expert specializing in New Zealand accounting practices."},
+                    {"role": "user", "content": prompt}
                 ],
-                temperature=0,
-                max_tokens=4096
+                temperature=0.1,
+                response_format={"type": "json_object"}
             )
             
-            # Extract JSON structured financial data
-            result_text = response.choices[0].message.content
-            
-            # Clean up the response to ensure it's valid JSON
-            # Remove any markdown code block markers if present
-            result_text = result_text.replace("```json", "").replace("```", "").strip()
-            
-            print("Received response from OpenAI, parsing JSON...")
-            
-            # Parse the JSON response
-            result = json.loads(result_text)
+            result = json.loads(response.choices[0].message.content)
+            print(f"GPT transformation complete. Extracted {len(result.get('table_data', []))} rows of data with NZ-specific categorization.")
             
             # Convert to DataFrame
             df = pd.DataFrame(result.get("table_data", []))
-            
-            print(f"Successfully extracted {len(df)} rows of financial data.")
             
             # Ensure correct data types
             if 'Amount' in df.columns:
@@ -213,6 +271,30 @@ class GPTFinancialParser:
             return app_df[required_columns + [col for col in app_df.columns if col not in required_columns]]
         
         except Exception as e:
+            print(f"Error transforming document to structured table: {e}")
+            # Return empty DataFrame with required columns
+            return pd.DataFrame(columns=['date', 'description', 'amount', 'main_category', 'subcategory'])
+    
+    def parse_financial_document(self, file_path):
+        """
+        Parse a financial document using GPT to transform it into a structured table with NZ-specific categorization.
+        
+        Args:
+            file_path (str): Path to the financial document file
+            
+        Returns:
+            pandas.DataFrame: DataFrame with structured financial data for NZ accounting
+        """
+        try:
+            # Extract content from file
+            content_data = self.extract_file_content(file_path)
+            content = content_data["main_content"]
+            
+            # Transform content to structured table with NZ-specific categorization
+            df = self.transform_to_structured_table(content)
+            
+            return df
+        except Exception as e:
             print(f"Error parsing financial document: {e}")
             # Return empty DataFrame with standard columns
             return pd.DataFrame(columns=['date', 'description', 'amount', 'main_category', 'subcategory'])
@@ -220,13 +302,13 @@ class GPTFinancialParser:
 # Function to use in the main application
 def parse_with_gpt(file_path):
     """
-    Parse a financial document using GPT to transform it into a structured table.
+    Parse a financial document using GPT to transform it into a structured table with NZ-specific categorization.
     
     Args:
         file_path (str): Path to the financial document file
         
     Returns:
-        pandas.DataFrame: DataFrame with structured financial data
+        pandas.DataFrame: DataFrame with structured financial data for NZ accounting
     """
     try:
         parser = GPTFinancialParser()
