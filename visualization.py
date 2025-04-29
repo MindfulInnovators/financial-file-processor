@@ -153,10 +153,10 @@ def display_financial_dashboard(df):
             ).reset_index()
             
             fig_monthly = px.bar(monthly_summary, x="year_month", y=["Revenue", "Expenses"], 
-                                 title="Monthly Revenue vs Expenses", barmode=\'group\',
+                                 title="Monthly Revenue vs Expenses", barmode="group",
                                  labels={"year_month": "Month", "value": "Amount ($)", "variable": "Type"},
                                  color_discrete_map={"Revenue": "#2ca02c", "Expenses": "#d62728"})
-            fig_monthly.update_layout(legend_title_text=\'Category\', yaxis_tickprefix="$", yaxis_tickformat=",.2f")
+            fig_monthly.update_layout(legend_title_text="Category", yaxis_tickprefix="$", yaxis_tickformat=",.2f")
             fig_monthly.update_traces(hovertemplate="<b>%{x}</b><br>%{data.name}: $%{y:,.2f}<extra></extra>")
             st.plotly_chart(fig_monthly, use_container_width=True)
         except Exception as e:
@@ -171,9 +171,9 @@ def display_financial_dashboard(df):
                 # Aggregate by main_category first, then subcategory for treemap path
                 expense_summary = expense_df.groupby(["main_category", "subcategory"])["amount_abs"].sum().reset_index()
                 
-                fig_expense_treemap = px.treemap(expense_summary, path=[px.Constant("Expenses"), \'main_category\', \'subcategory\'], values=\'amount_abs\',
+                fig_expense_treemap = px.treemap(expense_summary, path=[px.Constant("Expenses"), "main_category", "subcategory"], values="amount_abs",
                                                title="Expense Breakdown (Main & Subcategories)",
-                                               color=\'main_category\', # Color by main category
+                                               color="main_category", # Color by main category
                                                color_discrete_sequence=px.colors.qualitative.Pastel)
                 fig_expense_treemap.update_traces(
                     texttemplate="<b>%{label}</b><br>$%{value:,.2f}<br>%{percentParent:.1%}",
@@ -193,13 +193,13 @@ def display_financial_dashboard(df):
             revenue_summary = revenue_summary[revenue_summary["amount"] > 0] # Ensure positive amounts for pie
             
             if not revenue_summary.empty:
-                fig_revenue_pie = px.pie(revenue_summary, values=\'amount\', names=\'subcategory\',
+                fig_revenue_pie = px.pie(revenue_summary, values="amount", names="subcategory",
                                        title="Revenue Sources by Subcategory",
                                        hole=0.3)
                 fig_revenue_pie.update_traces(
                     texttemplate="%{label}:<br>$%{value:,.2f}<br>(%{percent:.1%})",
                     hovertemplate="<b>%{label}</b><br>Amount: $%{value:,.2f}<br>Percentage: %{percent:.1%}<extra></extra>",
-                    textposition=\'outside\'
+                    textposition="outside"
                 )
                 st.plotly_chart(fig_revenue_pie, use_container_width=True)
             else:
@@ -233,4 +233,3 @@ def display_financial_dashboard(df):
             )
         }
     )
-
