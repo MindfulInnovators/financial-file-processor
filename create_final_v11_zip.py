@@ -22,10 +22,10 @@ def create_zip_archive(zip_filename, source_dir):
                  
             # Add file to zip
             zipf.write(file_path, file_path.relative_to(source_path))
-            print(f"Adding {file_path.relative_to(source_path)}")
+            # print(f"Adding {file_path.relative_to(source_path)}") # Reduce verbosity
 
 if __name__ == "__main__":
-    zip_filename = "/home/ubuntu/financial_app_final_v9_money_format.zip"
+    zip_filename = "/home/ubuntu/financial_app_final_v11_error_handling.zip"
     source_directory = "/home/ubuntu/financial_app"
     
     print(f"Creating zip archive: {zip_filename} from {source_directory}")
